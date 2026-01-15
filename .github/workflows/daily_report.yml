@@ -1,0 +1,22 @@
+name: Daily GA4 Report
+
+on:
+  schedule:
+    - cron: '0 23 * * *' # 日本時間 朝8:00
+  workflow_dispatch: # 手動ボタンでも実行可能
+
+jobs:
+  run-ga4-script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install libraries
+        run: pip install google-analytics-data gspread google-auth
+      - name: Run script
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: python main.py
