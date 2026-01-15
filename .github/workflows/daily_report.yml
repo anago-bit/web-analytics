@@ -1,25 +1,23 @@
-name: GA4自動レポート更新 # ← ここがGitHubの画面に表示される名前になります
+name: GA4自動レポート更新 (Gemini分析付)
 
 on:
   schedule:
-    - cron: '0 23 * * *' # 日本時間 朝8:00
-  workflow_dispatch: # 手動実行ボタンを出すための記述
+    - cron: '0 23 * * *'
+  workflow_dispatch:
 
 jobs:
   run-ga4-script:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.12' # 警告が出ないように最新版に
-
+          python-version: '3.12'
       - name: Install libraries
-        run: pip install google-analytics-data gspread google-auth
-
+        run: pip install google-analytics-data gspread google-auth google-generativeai
       - name: Run script
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         run: python main.py
