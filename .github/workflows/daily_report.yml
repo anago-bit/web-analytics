@@ -10,10 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Set up Python
+     - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.12' # 3.10から3.12へ変更
       - name: Install libraries
         run: pip install google-analytics-data gspread google-auth
       - name: Run script
