@@ -20,9 +20,12 @@ TARGET_SITES = {
     "294934653": "スマイルモビリティ",
     # "471206109": "テストサイト", # 新しいIDを追加する場合はGA4側で権限追加が必要
 }
+# GitHubのSecrets（環境変数）からのみ読み込む状態（安全）
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") 
 
-# Gemini APIキー
-GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
+# もしローカル（Mac）でも動かしたい場合は、以下のようにしておくと安全です
+if not GEMINI_API_KEY:
+    GEMINI_API_KEY = os.environ.get("GOOGLE_API_KEY") # ターミナルのexport等から読み込む
 
 # サービスアカウントJSONのファイル名
 JSON_FILE_NAME = "SERVICE_ACCOUNT.json"
