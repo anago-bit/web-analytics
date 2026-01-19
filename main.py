@@ -18,30 +18,30 @@ TARGET_SITES = {
     "382138346": "ITS",
     "391533336": "レンタカー",
     "294934653": "スマイルモビリティ",
-    # "471206109": "テストサイト", # 新しいIDを追加する場合はGA4側で権限追加が必要
 }
-# GitHubのSecrets（環境変数）からのみ読み込む状態（安全）
+
+# GitHubのSecrets（環境変数）またはローカルの環境変数から読み込む
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") 
-
-# もしローカル（Mac）でも動かしたい場合は、以下のようにしておくと安全です
 if not GEMINI_API_KEY:
-    GEMINI_API_KEY = os.environ.get("GOOGLE_API_KEY") # ターミナルのexport等から読み込む
+    GEMINI_API_KEY = os.environ.get("GOOGLE_API_KEY")
 
-# サービスアカウントJSONのファイル名
-JSON_FILE_NAME = "SERVICE_ACCOUNT.json"
-
-# --- 2. 認証情報取得 ---
+# --- 2. 認証情報取得 (GitHub Actions / ローカル両対応に強化) ---
 def get_credentials_dict():
-    creds_json = os.getenv("SERVICE_ACCOUNT_JSON") # GitHub Actions用
+    # A. GitHub Actions用: 環境変数 SERVICE_ACCOUNT_JSON があれば最優先で使用
+    creds_json = os.getenv("SERVICE_ACCOUNT_JSON")
     if creds_json:
         return json.loads(creds_json)
     
-    # ローカル実行時は JSON ファイルを使用
-    if os.path.exists(JSON_FILE_NAME):
-        with open(JSON_FILE_NAME, "r") as f:
-            return json.load(f)
-    else:
-        raise FileNotFoundError(f"{JSON_FILE_NAME} が見つかりません。")
+    # B. ローカル用: ファイルが存在する場合のみ読み込む
+    # マックでのファイル名に合わせて2パターン探します
+    local_files = ["SERVICE_ACCOUNT.json", "service-account-key.json"]
+    for file_name in local_files:
+        if os.path.exists(file_name):
+            with open(file_name, "r") as f:
+                return json.load(f)
+    
+    # どちらも見つからない場合のみエラーを出す
+    raise FileNotFoundError("認証情報が見つかりません。GitHubのSecrets設定、またはローカルにJSONファイルが必要です。")
 
 # 共通で使用する認証辞書
 credentials_dict = get_credentials_dict()
@@ -107,7 +107,6 @@ def update_site_sheet(site_name, data_rows):
     analysis_text = analyze_with_gemini(site_name, data_rows)
     data_rows.append(["AI分析レポート", date_label, analysis_text])
 
-    # 最終的な列データを作成
     final_column_output = [''] * max(len(existing_items), 100)
     final_column_output[0] = date_label
 
@@ -115,7 +114,6 @@ def update_site_sheet(site_name, data_rows):
         if item_name in existing_items:
             idx = existing_items.index(item_name)
         else:
-            # 新しい項目があれば追加
             idx = len(existing_items)
             existing_items.append(item_name)
             worksheet.update_cell(idx + 1, 1, item_name)
@@ -139,7 +137,6 @@ def get_ga4_data(property_id):
     ]
     
     try:
-        # 全体、流入元、ページの3つのレポートを取得
         res_total = client.run_report(RunReportRequest(property=f"properties/{property_id}", dimensions=[Dimension(name="date")], metrics=metrics, date_ranges=dr))
         res_source = client.run_report(RunReportRequest(property=f"properties/{property_id}", dimensions=[Dimension(name="date"), Dimension(name="sessionSourceMedium")], metrics=[Metric(name="screenPageViews")], date_ranges=dr))
         res_pages = client.run_report(RunReportRequest(property=f"properties/{property_id}", dimensions=[Dimension(name="date"), Dimension(name="landingPagePlusQueryString")], metrics=[Metric(name="screenPageViews")], date_ranges=dr))
