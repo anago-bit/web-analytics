@@ -46,29 +46,21 @@ def get_credentials_dict():
 # 共通で使用する認証辞書
 credentials_dict = get_credentials_dict()
 
-# --- 3. Gemini分析エンジン (Gemini 2.5 Flash 対応版) ---
-def analyze_with_gemini(site_name, data_rows):
-    data_summary = "\n".join([f"{r[0]}: {r[2]}" for r in data_rows])
-    prompt = f"""
-    あなたはプロのWebマーケターです。以下のGA4データ（昨日分）を分析し、{site_name}の担当者向けに日本語で日報を作成してください。
+# --- 3. Gemini分析エンジン ---
+def analyze_with_gemini(data_summary):
+    # ここが重要！環境変数が正しく読み込めているかチェック
+    api_key = os.environ.get("GEMINI_API_KEY")
     
-    【データ】
-    {data_summary}
-    
-    【要件】
-    1. 前日のPVやユーザー数の推移から読み取れる概況を伝える。
-    2. 特筆すべき流入元やページの変化を指摘する。
-    3. 明日以降に実施すべき具体的なアクション案を1つ提示する。
-    
-    専門用語は避け、300文字程度でお願いします。
-    """
-    
-    # 最新の Gemini 2.5 Flash モデルを使用
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+    if not api_key:
+        print("❌ エラー: GEMINI_API_KEY が環境変数から取得できていません。")
+        return "APIキー設定エラー"
+
+    # モデル名とAPIキーをURLに確実に組み込む
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={api_key}"
     
     payload = {
         "contents": [{
-            "parts": [{"text": prompt}]
+            "parts": [{"text": f"以下のデータを分析して日報を日本語で作成してください。\n\n{data_summary}"}]
         }]
     }
     headers = {'Content-Type': 'application/json'}
@@ -76,10 +68,13 @@ def analyze_with_gemini(site_name, data_rows):
     try:
         response = requests.post(url, json=payload, headers=headers)
         res_json = response.json()
-        if "candidates" in res_json:
-            return res_json["candidates"][0]["content"]["parts"][0]["text"]
-        else:
-            return f"AI分析エラー: {res_json.get('error', {}).get('message', '不明なエラー')}"
+        
+        # エラー応答が返ってきた場合に詳細を表示
+        if "error" in res_json:
+            print(f"❌ Gemini API詳細エラー: {res_json['error']['message']}")
+            return f"分析エラー: {res_json['error']['message']}"
+            
+        return res_json["candidates"][0]["content"]["parts"][0]["text"]
     except Exception as e:
         return f"通信エラー: {e}"
 
