@@ -6,7 +6,9 @@ from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Dimension, Metric
 from google.oauth2.service_account import Credentials
 
-# --- 1. 設定情報 ---
+# ==========================================
+# 1. 設定情報
+# ==========================================
 # スプレッドシートのID
 SPREADSHEET_KEY = '1FEO4sv3WP2_AQLsXezwVV32d_luGUwVRcsStuGAytOE'
 
@@ -20,61 +22,66 @@ TARGET_SITES = {
     "294934653": "スマイルモビリティ",
 }
 
-# GitHubのSecrets（環境変数）またはローカルの環境変数から読み込む
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") 
-if not GEMINI_API_KEY:
-    GEMINI_API_KEY = os.environ.get("GOOGLE_API_KEY")
+# GitHub Secrets または環境変数から取得
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+SERVICE_ACCOUNT_JSON = os.environ.get("SERVICE_ACCOUNT_JSON")
 
-# --- 2. 認証情報取得 (GitHub Actions / ローカル両対応に強化) ---
+# モデル名
+GEMINI_MODEL = "gemini-2.5-flash"
+
+# --- 2. 認証情報取得 ---
 def get_credentials_dict():
-    # A. GitHub Actions用: 環境変数 SERVICE_ACCOUNT_JSON があれば最優先で使用
-    creds_json = os.getenv("SERVICE_ACCOUNT_JSON")
-    if creds_json:
-        return json.loads(creds_json)
+    # GitHub Actions環境を優先
+    if SERVICE_ACCOUNT_JSON:
+        return json.loads(SERVICE_ACCOUNT_JSON)
     
-    # B. ローカル用: ファイルが存在する場合のみ読み込む
-    # マックでのファイル名に合わせて2パターン探します
-    local_files = ["SERVICE_ACCOUNT.json", "service-account-key.json"]
-    for file_name in local_files:
-        if os.path.exists(file_name):
-            with open(file_name, "r") as f:
+    # ローカル実行用（Macにファイルがある場合）
+    local_files = ["service-account-key.json", "SERVICE_ACCOUNT.json"]
+    for filename in local_files:
+        if os.path.exists(filename):
+            with open(filename, "r") as f:
                 return json.load(f)
     
-    # どちらも見つからない場合のみエラーを出す
-    raise FileNotFoundError("認証情報が見つかりません。GitHubのSecrets設定、またはローカルにJSONファイルが必要です。")
+    raise FileNotFoundError("認証情報が見つかりません。GitHubのSecrets設定を確認してください。")
 
 # 共通で使用する認証辞書
 credentials_dict = get_credentials_dict()
 
-# --- 3. Gemini分析エンジン ---
-def analyze_with_gemini(data_summary):
-    # ここが重要！環境変数が正しく読み込めているかチェック
-    api_key = os.environ.get("GEMINI_API_KEY")
+# --- 3. Gemini分析エンジン (Gemini 2.5 Flash 対応) ---
+def analyze_with_gemini(site_name, data_rows):
+    # GA4データをテキストに変換
+    data_summary = "\n".join([f"{r[0]}: {r[2]}" for r in data_rows])
     
-    if not api_key:
-        print("❌ エラー: GEMINI_API_KEY が環境変数から取得できていません。")
-        return "APIキー設定エラー"
+    if not GEMINI_API_KEY:
+        return "❌ エラー: GEMINI_API_KEY が設定されていません。"
 
-    # モデル名とAPIキーをURLに確実に組み込む
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
     
-    payload = {
-        "contents": [{
-            "parts": [{"text": f"以下のデータを分析して日報を日本語で作成してください。\n\n{data_summary}"}]
-        }]
-    }
+    prompt = f"""
+    あなたはプロのWebマーケターです。以下のGA4データ（昨日分）を分析し、{site_name}の担当者向けに日本語で日報を作成してください。
+    
+    【データ】
+    {data_summary}
+    
+    【要件】
+    1. 前日のPVやユーザー数の推移から読み取れる概況を伝える。
+    2. 特筆すべき流入元やページの変化を指摘する。
+    3. 明日以降のアクション案を1つ提示する。
+    
+    専門用語は避け、300文字程度でお願いします。
+    """
+    
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
     headers = {'Content-Type': 'application/json'}
     
     try:
         response = requests.post(url, json=payload, headers=headers)
         res_json = response.json()
-        
-        # エラー応答が返ってきた場合に詳細を表示
-        if "error" in res_json:
-            print(f"❌ Gemini API詳細エラー: {res_json['error']['message']}")
-            return f"分析エラー: {res_json['error']['message']}"
-            
-        return res_json["candidates"][0]["content"]["parts"][0]["text"]
+        if "candidates" in res_json:
+            return res_json["candidates"][0]["content"]["parts"][0]["text"]
+        else:
+            error_msg = res_json.get('error', {}).get('message', '不明なエラー')
+            return f"AI分析エラー: {error_msg}"
     except Exception as e:
         return f"通信エラー: {e}"
 
@@ -102,6 +109,7 @@ def update_site_sheet(site_name, data_rows):
     analysis_text = analyze_with_gemini(site_name, data_rows)
     data_rows.append(["AI分析レポート", date_label, analysis_text])
 
+    # 最終的な列データを作成
     final_column_output = [''] * max(len(existing_items), 100)
     final_column_output[0] = date_label
 
@@ -165,4 +173,6 @@ if __name__ == "__main__":
         if site_data:
             update_site_sheet(name, site_data)
             print(f"✅ {name} の更新が完了しました。")
+        else:
+            print(f"❌ {name} のデータ取得に失敗しました。")
     print("\n✨ すべての処理が完了しました。")
