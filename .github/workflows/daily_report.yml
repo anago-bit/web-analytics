@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install dependencies
-       run: pip install google-analytics-data google-analytics-admin gspread oauth2client requests google-auth
+        run: pip install google-analytics-data google-analytics-admin gspread oauth2client requests google-auth
       - name: Run script
         env:
           # ここが超重要！ これがないとプログラムにキーが渡りません
