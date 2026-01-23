@@ -211,6 +211,12 @@ def get_ga4_data(property_id):
 # 6. メイン実行
 # ==========================================
 if __name__ == "__main__":
+    
+    def check_accessible_properties():
+    client = BetaAnalyticsDataClient(credentials=Credentials.from_service_account_info(credentials_dict))
+    # サービスアカウントが触れるアカウント一覧を取得（簡易版）
+    print(">>> サービスアカウントがアクセス可能なプロパティを確認中...")
+    # ※この機能はAdmin APIが必要な場合がありますが、Data APIの接続テストとして有効です
     print("🚀 GA4自動レポート & Gemini 2.5 Flash 起動")
 
     for pid, name in TARGET_SITES.items():
